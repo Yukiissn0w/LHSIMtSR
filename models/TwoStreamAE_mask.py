@@ -148,8 +148,12 @@ class TwoStreamAE_mask(BaseModel):
             
             oneHot_label = torch.cuda.FloatTensor(torch.Size(oneHot_size)).zero_()
             #oneHot_label = torch.FloatTensor(torch.Size(oneHot_size)).zero_()
-            oneHot_label = oneHot_label.scatter_(1, label_map.data.long().cuda(), 1.0)
-            #oneHot_label = oneHot_label.scatter_(1, label_map.data.long(), 1.0)
+            print('label_map:{}'.format(type(label_map)))
+            print('label_map.data:{}'.format(type(label_map.data)))
+            print('label_map.data.cuda():{}'.format(type(label_map.data.cuda())))
+            print('label_map.data.long():{}'.format(type(label_map.data.long())))
+            #oneHot_label = oneHot_label.scatter_(1, label_map.data.cuda(), 1.0)
+            oneHot_label = oneHot_label.scatter_(1, label_map.data.cuda().long(), 1.0)
             
             #ch
             oneHot_ctx_in = torch.cuda.FloatTensor(torch.Size(oneHot_size)).zero_()
