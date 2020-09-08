@@ -38,19 +38,12 @@ class TwoStreamAE_mask(BaseModel):
             from models.MaskTwoStreamConv_NET import MaskTwoStreamConv_NET as model_factory
     
         model = self.get_model(model_factory)
-        #model.to("cuda")
         self.netG = model(opt)
         self.netG.initialize()
-        
         # move networsk to gpu
-        
         if len(opt.gpu_ids) > 0:
             assert(torch.cuda.is_available())
-            #self.netG.cudafy(opt.gpu_ids[0])
-            #ch
-            self.netG.cudafy(1)
-        #ch
-        #self.netG.to("cuda")
+            self.netG.cudafy(opt.gpu_ids[0])
  
         print('---------- Networks initialized -------------')
        
@@ -143,27 +136,16 @@ class TwoStreamAE_mask(BaseModel):
         else:
             size = label_map.size()
             oneHot_size = (size[0], self.opt.label_nc, size[2], size[3])
-            
-            #ch
-            
             oneHot_label = torch.cuda.FloatTensor(torch.Size(oneHot_size)).zero_()
-            #oneHot_label = torch.FloatTensor(torch.Size(oneHot_size)).zero_()
-            print('label_map:{}'.format(type(label_map)))
-            print('label_map.data:{}'.format(type(label_map.data)))
-            print('label_map.data.cuda():{}'.format(type(label_map.data.cuda())))
-            print('label_map.data.long():{}'.format(type(label_map.data.long())))
-            #oneHot_label = oneHot_label.scatter_(1, label_map.data.cuda(), 1.0)
-            oneHot_label = oneHot_label.scatter_(1, label_map.data.cuda().long(), 1.0)
+            oneHot_label = oneHot_label.scatter_(1, label_map.data.long().cuda(), 1.0)
             
-            #ch
             oneHot_ctx_in = torch.cuda.FloatTensor(torch.Size(oneHot_size)).zero_()
-            oneHot_ctx_in = oneHot_ctx_in.scatter_(1, mask_ctx_in.data.long(), 1.0)
+            oneHot_ctx_in = oneHot_ctx_in.scatter_(1, mask_ctx_in.data.long().cuda(), 1.0)
             
-            #ch
-            oneHot_cls = torch.FloatTensor(size[0], self.opt.label_nc)
-            oneHot_cls = oneHot_cls.scatter_(1, cls.data.long(), 1.0) 
+            oneHot_cls = torch.cuda.FloatTensor(size[0], self.opt.label_nc)
+            oneHot_cls = oneHot_cls.scatter_(1, cls.data.long().cuda(), 1.0) 
             
-            oneHot_obj_mask_in = torch.FloatTensor(torch.Size(oneHot_size)).zero_()
+            oneHot_obj_mask_in = torch.cuda.FloatTensor(torch.Size(oneHot_size)).zero_()
             if not (mask_in is None):
                 for b in range(size[0]):
                     oneHot_obj_mask_in[b,cls.data[b,0],:,:] = mask_in.data[b,0]  

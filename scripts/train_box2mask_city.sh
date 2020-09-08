@@ -5,5 +5,5 @@ python train_box2mask.py --dataroot=datasets/cityscape/ --dataloader cityscape -
   --niter 400 --beta1 0.5 --objReconLoss bce --norm_layer batch --cond_in ctx_obj \
   --gan_weight 0.1 --which_gan patch_multiscale --num_layers_D 3 --n_blocks 6 --fineSize 256 \
   --use_output_gate --no_comb --contextMargin 2 --use_ganFeat_loss \
-  --min_box_size 128 --max_box_size 256 --gpu_ids 3
+  --min_box_size 128 --max_box_size 256 --gpu_ids 1
 
