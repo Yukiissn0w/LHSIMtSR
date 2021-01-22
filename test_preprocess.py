@@ -37,11 +37,6 @@ def loadHotels50k_mix(file):
     
     instance = [int(c[0]) for c in C]
     names = [c[1].strip() for c in C]
-    # corrected_raw_name = [c[4].strip() for c in C]
-    # partlevel = [int(c[1]) for c in C]
-    # ispart = [1 if p > 0 else 0 for p in partlevel]
-    # iscrop = [int(c[2]) for c in C]
-    # listattributes = [c[5].replace('"','').strip() for c in C]
     
     objects = {}
     objects['instancendx'] = []
@@ -57,24 +52,6 @@ def loadHotels50k_mix(file):
         objects['listattributes'].append(names[i])
     
     return ObjectClassMasks, ObjectInstanceMasks, objects
-
-def fix_all_where(row, col):
-    save_row=[]
-    tmp=-1
-    cnt=0
-    for i, num in enumerate(row):
-        if cnt==0:
-            if tmp==num: cnt+=1
-        elif cnt==1:
-            if tmp==num: save_row.append(i)
-            cnt=0
-        tmp=num
-    save=[]
-    for i, idx in enumerate(save_row):
-        if col[idx-2]==col[idx-1]:
-            if col[idx-1]==col[idx]: save.append(idx)
-    
-    return row[save], col[save]
 
 if __name__ == '__main__':
     ade_name = 'Hotels50k_imp_20210120_test'  # 対象のフォルダ
@@ -101,28 +78,8 @@ if __name__ == '__main__':
         if not os.path.exists(os.path.join(save_dir, dir_name)):
             os.makedirs(os.path.join(save_dir, dir_name))
 
-    # index = scipy.io.loadmat(os.path.join(save_dir, mat_file))
-    # filenames = index['index'][0,0][0][0]
-    # folders = index['index'][0,0][1][0]
-    # obj_names = index['index'][0,0][6][0]
-    # import pprint
-    # print('---index---\n{}'.format(index))
-    # print('---filenames---\n{}'.format(filenames))
-    # print('---folders---\n{}'.format(folders))
-    # print('---obj_names---\n{}'.format(obj_names))
-    # exit()
-    # ids = []
-    # bedroom_name = 'images/training/b/bedroom'
-
-    # for i, folder in enumerate(folders):
-    #     if '/'.join(folder[0].split('/')[1:]) == bedroom_name:
-    #         ids.append(i)
-
     count_val = 0
-    # Top 50 most occurring objects in the datasetのID(ADE20k)
-    # Top 50 object150_info Idx 
-    # bed, windowpane;window, curtain;drape;drapery;mantle;pall,
-    # chair, sofa;couch;lounge, shelf, desk, lamp, pillow
+    
     sorted_50_id = [8, 9, 19, 20, 24, 25, 34, 37, 58]
     sorted_50_name = ['bed', 'windowpane;window', 'curtain;drape;drapery;mantle;pall',
                     'chair', 'sofa;couch;lounge', 'shelf', 'desk', 'lamp', 'pillow']
@@ -150,28 +107,17 @@ if __name__ == '__main__':
     file_paths = glob.glob(os.path.join(folder, '*.png')) 
     # print(len(file_paths))
 
-
-
     for i, file_path in enumerate(tqdm(file_paths)): 
-
-        # folder = os.path.join(*folders[id_][0].split('/')[1:])
-        # filename = os.path.join(folder, filenames[id_][0])
-        # filename = os.path.join(save_dir, filename)
-        
-        # original 
+    
+        # original用
         # ori_fn = file_path.split('/')[-1].replace('.png', '')
-        # negaposi = file_path.split('/')[-1].split('_')[1]
-        # file_number = file_path.split('/')[-1].split('_')[2].replace('.png','')
 
-        # local用
+        # local debug用
         ori_fn = file_path.split('\\')[-1].replace('.png', '')
-        # print(file_path)
-        # print(file_path.replace('/train_image','/train_label').replace('.png', '_seg.png'))
 
         Om, Oi, objects = loadHotels50k_mix(file_path)
         
-        r, c = Oi.shape
-        # print(r,c)  # 424, 640
+        r, c = Oi.shape # print(r,c)  # >> 424, 640
         label_map = np.zeros((r, c))
         fine_label = Om
 
@@ -201,38 +147,19 @@ if __name__ == '__main__':
                 if np.all(uniq_color==sorted_color): 
                     object_colors.append(sorted_color)
                     object_names.append(sorted_50_name[j])
-        # print(file_path)
-        # print(uniq_colors)
-        # print(sorted_colors)
-        # print(object_colors)
-        # input()
-        # continue
-
+        
         for j, object_color in enumerate(object_colors):
-            # row, col, _ = np.where(seg == object_color) # hm2
-            # row, col = fix_all_where(row, col)
-            
-            # row, col = np.where(((seg[:,:, 0] == object_color[0]) & (seg[:,:, 1] == object_color[1]) & (seg[:,:, 2] == object_color[2])))
-            
-            # seg_ = seg.copy()
-            # for channel in range(3):
-            #     seg_[:,:,c] = np.where(seg_[:, :, channel] == object_color[c], 255, seg_[:, :, channel])
-            # cv2.imwrite('./datasets/test{}_{}-{}.jpg'.format(i, j, object_names[j]), seg_)
-
-            # print(i, j, object_names[j])
             row, col = np.where(((seg[:,:, 0] == object_color[0]) & (seg[:,:, 1] == object_color[1]) & (seg[:,:, 2] == object_color[2])))
 
             x1, y1 = int(min(col) + 1), int(min(row) + 1)
             x2, y2 = int(max(col) + 1), int(max(row) + 1)
 
             if (x2-x1)*(y2-y1)<h*w*(0.01): continue
-            # print(x1, y1, x2, y2)
             w, h = x2 - x1, y2 - y1
             margin_x = int(max(round(w / 100), 1))
             margin_y = int(max(round(h / 100), 1))
             x1, y1 = max(x1 - margin_x, 1), max(y1 - margin_y, 1)
             x2, y2 = min(x2 + margin_x, seg.shape[1]), int(min(y2 + margin_y, seg.shape[0]))
-            # print(x1, y1, x2, y2)
             red,green,blue = object_color
             red,green,blue = int(red), int(green), int(blue)
             bbox_data['objects']['{},{},{}'.format(red,green,blue)] = {
@@ -251,6 +178,7 @@ if __name__ == '__main__':
 
         prefix = '{}_fn_{}'.format('{0:05}'.format(i+1), ori_fn)
 
+        # original用
         # is_train = False
         # if is_train or count_val >= 500:
         #     bbox_file = os.path.join(save_dir, bbox_train_dir,
@@ -272,6 +200,7 @@ if __name__ == '__main__':
         #         prefix + inst_suf)
         #     count_val += 1
 
+        # local debug用
         bbox_file = os.path.join(save_dir, bbox_train_dir,
             prefix + bbox_suf)
         img_file = os.path.join(save_dir, img_train_dir,
