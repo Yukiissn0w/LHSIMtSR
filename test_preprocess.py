@@ -81,10 +81,7 @@ if __name__ == '__main__':
     src_dir = './datasets'
     save_dir = os.path.join(src_dir, ade_name)
     bbox_train_dir = 'train_bbox'
-
-    # bbox_val_dir = 'val_bbox_hm'
-    bbox_val_dir = 'val_bbox_hm2'
-    
+    bbox_val_dir = 'val_bbox'
     img_train_dir = 'train_img'
     img_val_dir = 'val_img'
     label_train_dir = 'train_label'
@@ -96,9 +93,6 @@ if __name__ == '__main__':
     label_suf = '_gtFine_labelIds.png'
     inst_suf = '_gtFine_instanceIds.png'
     mat_file = 'color150.mat'    # ade20kベースだが一応学習に使用したモデルに付属していたものを使用する
-
-    patch_val_dir = 'val_patch2'
-    patch_suf = '_patch.png'
 
     dir_names = [bbox_train_dir, bbox_val_dir, img_train_dir, img_val_dir,
         label_train_dir, label_val_dir, inst_train_dir, inst_val_dir]
@@ -164,9 +158,13 @@ if __name__ == '__main__':
         # filename = os.path.join(folder, filenames[id_][0])
         # filename = os.path.join(save_dir, filename)
         
-        negaposi = file_path.split('/')[-1].split('_')[1]
-        file_number = file_path.split('/')[-1].split('_')[2].replace('.png','')
+        # original 
+        # ori_fn = file_path.split('/')[-1].replace('.png', '')
+        # negaposi = file_path.split('/')[-1].split('_')[1]
+        # file_number = file_path.split('/')[-1].split('_')[2].replace('.png','')
 
+        # local用
+        ori_fn = file_path.split('\\')[-1].replace('.png', '')
         # print(file_path)
         # print(file_path.replace('/train_image','/train_label').replace('.png', '_seg.png'))
 
@@ -248,15 +246,10 @@ if __name__ == '__main__':
             # draw.rectangle([x1, y1, x2, y2], outline=(red,green,blue))
             # print("bbox: {}, cls: {}, color: {}".format([x1, y1, x2, y2], j+1, [red,green,blue]))
             # real_img.show()
-            real_img.save('./datasets/bbox_preprocess_test/bbox{}_{}-{}.jpg'.format(i, j, object_names[j]), quality=95)
             # input()
+            # real_img.save('./datasets/bbox_preprocess_test/bbox{}_{}-{}.jpg'.format(i, j, object_names[j]), quality=95)
 
-        #     print(type(x1), type(y1), type(x2), type(y2))
-            # print(x1, y1, x2, y2)
-        # exit()
-
-        # prefix ='Hotels50k_mix_mini_{0:05}_'.format(i+1)
-        # prefix = '{}_{}'.format(prefix+negaposi, file_number)
+        prefix = '{}_fn_{}'.format('{0:05}'.format(i+1), ori_fn)
 
         # is_train = False
         # if is_train or count_val >= 500:
@@ -277,21 +270,28 @@ if __name__ == '__main__':
         #         prefix + label_suf)
         #     ist_path = os.path.join(save_dir, inst_val_dir,
         #         prefix + inst_suf)
-        #     patch_path = os.path.join(save_dir, patch_val_dir,
-        #         prefix + patch_suf)
         #     count_val += 1
-        # with open(bbox_file, 'w') as outfile:
-        #     json.dump(bbox_data, outfile)
-        # copyfile(file_path, img_file)
-        # real_img.save(patch_path, quality=95)
-        # with warnings.catch_warnings():
-        #     warnings.simplefilter("ignore")
-            # imageio.imwrite(lbl_path, fine_label.astype('uint8'))
-            # imageio.imwrite(ist_path, Oi.astype('uint8'))
 
-        # if (i+1) % 100 == 0:
-        #     sys.stdout.write("-")
-        #     sys.stdout.flush()
-        # if i > 100: break
+        bbox_file = os.path.join(save_dir, bbox_train_dir,
+            prefix + bbox_suf)
+        img_file = os.path.join(save_dir, img_train_dir,
+            prefix + img_suf)
+        lbl_path = os.path.join(save_dir, label_train_dir,
+            prefix + label_suf)
+        ist_path = os.path.join(save_dir, inst_train_dir,
+            prefix + inst_suf)
+
+        with open(bbox_file, 'w') as outfile:
+            json.dump(bbox_data, outfile)
+        copyfile(file_path, img_file)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            imageio.imwrite(lbl_path, fine_label.astype('uint8'))
+            imageio.imwrite(ist_path, Oi.astype('uint8'))
+
+        if (i+1) % 100 == 0:
+            sys.stdout.write("-")
+            sys.stdout.flush()
+        if i > 100: break
 
     sys.stdout.write("\n")
