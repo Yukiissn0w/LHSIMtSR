@@ -11,7 +11,6 @@ import os
 from torch.autograd import Variable
 from util.image_pool import ImagePool
 from .base_model import BaseModel
-#from layer_util import *
 from models.layer_util import *
 import util.util as util
 from collections import OrderedDict
@@ -114,9 +113,11 @@ class Pix2PixHDModel_condImg(BaseModel):
             self.criterionFeat = torch.nn.L1Loss()
             if not opt.no_vgg_loss:             
                 self.criterionVGG = VGGLoss(self.gpu_ids)
-        
+            self.criterionIMP = torch.nn.CrossEntropyLoss()
+
             # Names so we can breakout loss
-            self.loss_names = ['G_GAN', 'G_GAN_Feat', 'G_VGG', 'D_real', 'D_fake']
+            # self.loss_names = ['G_GAN', 'G_GAN_Feat', 'G_VGG', 'D_real', 'D_fake']
+            self.loss_names = ['G_GAN', 'G_GAN_Feat', 'G_VGG', 'G_imp', 'D_real', 'D_fake']
 
             # initialize optimizers
             # optimizer G
@@ -149,8 +150,7 @@ class Pix2PixHDModel_condImg(BaseModel):
             # create one-hot vector for label map 
             size = label_map.size()
             oneHot_size = (size[0], self.opt.label_nc, size[2], size[3])
-            #ch
-            input_label = torch.FloatTensor(torch.Size(oneHot_size)).zero_()
+            input_label = torch.cuda.FloatTensor(torch.Size(oneHot_size)).zero_()
             input_label = input_label.scatter_(1, label_map.data.long().cuda(), 1.0)
 
         # get edges from instance map
@@ -197,7 +197,7 @@ class Pix2PixHDModel_condImg(BaseModel):
         losses, generated = self.forward(label, inst, image, feat, mask_in, mask_out, infer)
         return losses, generated 
         
-    def forward(self, label, inst, image, feat, mask_in, mask_out, infer=False):
+    def forward(self, label, inst, image, feat, mask_in, mask_out, infer=False, classifier=None, imp_label=None):
         # Encode Inputs
         input_label, inst_map, real_image, feat_map, cond_image = self.encode_input(label, inst, image, feat, mask_in=mask_in)  
 
@@ -205,10 +205,10 @@ class Pix2PixHDModel_condImg(BaseModel):
         input_mask = input_label.clone()
         input_label = torch.cat((input_label, cond_image), 1)
         # Fake Generation
-        input_concat = input_label  
+        input_concat = input_label
         if self.netG_type == 'global':
             fake_image = self.netG.forward(input_concat, mask_in)
-        elif self.netG_type == 'global_twostream':
+        elif self.netG_type == 'global_twostream': # train_20201215.sh choiced
             fake_image = self.netG.forward(cond_image, input_mask, mask_in)
 
         # Fake Detection and Loss
@@ -220,7 +220,7 @@ class Pix2PixHDModel_condImg(BaseModel):
         pred_fake_pool = self.discriminate(netD_cond, fake_image, mask_cond, True)
         loss_D_fake = self.criterionGAN(pred_fake_pool, False)
 
-        # Real Detection and Loss        
+        # Real Detection and Loss
         pred_real = self.discriminate(netD_cond, real_image, mask_cond, False)
         loss_D_real = self.criterionGAN(pred_real, True)
 
@@ -240,25 +240,37 @@ class Pix2PixHDModel_condImg(BaseModel):
             D_weights = 1.0 / self.opt.num_D
             for i in range(self.opt.num_D):
                 for j in range(len(pred_fake[i])-1):
+                    # criterionFeat=L1Loss
+                    # loss_G_GAN_Feat += D_weights * feat_weights * \
+                    #     self.criterionFeat(pred_fake[i][j], pred_real[i][j].detach()) * self.opt.lambda_feat
                     loss_G_GAN_Feat += D_weights * feat_weights * \
-                        self.criterionFeat(pred_fake[i][j], pred_real[i][j].detach()) * self.opt.lambda_feat
+                        self.criterionFeat(pred_fake[i][j], pred_real[i][j].detach()).cpu() * self.opt.lambda_feat
+            if torch.cuda.is_available():
+                loss_G_GAN_Feat = loss_G_GAN_Feat.cuda()
 
         # VGG feature matching loss
         loss_G_VGG = Variable(self.Tensor([0]))
         if not self.opt.no_vgg_loss:
             loss_G_VGG = self.criterionVGG(fake_image, real_image) * self.opt.lambda_feat
+        # 20210108追記：現オプション設定ではここの処理は行わない
         # color matching loss
         if self.opt.lambda_rec > 0:
             # TOOD(sh): this part is bit hacky but let's leave it for now 
             loss_G_GAN_Feat += self.criterionFeat(fake_image, real_image.detach()) * self.opt.lambda_rec
         
+        # impression loss
+        predicted = classifier(fake_image)
+        # predicted = classifier(util.tensor2im(fake_image))
+        # loss_G_imp = self.criterionIMP(predicted, imp_label)
+        loss_G_imp = self.criterionIMP(predicted, imp_label.squeeze())
+
         self.fake_image = fake_image.cpu().data[0]
         self.real_image = real_image.cpu().data[0]
         self.input_label = input_mask.cpu().data[0]
         self.input_image = cond_image.cpu().data[0] 
 
         # Only return the fake_B image if necessary to save BW
-        return [ [ loss_G_GAN, loss_G_GAN_Feat, loss_G_VGG, loss_D_real, loss_D_fake ], None if not infer else fake_image ]
+        return [ [ loss_G_GAN, loss_G_GAN_Feat, loss_G_VGG, loss_G_imp, loss_D_real, loss_D_fake ], None if not infer else fake_image ]
 
     def inference(self, label, inst, image, mask_in, mask_out):
         # Encode Inputs        
@@ -273,7 +285,7 @@ class Pix2PixHDModel_condImg(BaseModel):
         input_concat = input_label  
         if self.netG_type == 'global':
             fake_image = self.netG.forward(input_concat, mask_in)
-        elif self.netG_type == 'global_twostream':
+        elif self.netG_type == 'global_twostream':  # test_mask2image_202021217.sh
             mask_in = mask_in.cuda()
             fake_image = self.netG.forward(cond_image, input_mask, mask_in)
 
