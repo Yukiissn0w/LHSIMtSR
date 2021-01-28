@@ -49,9 +49,11 @@ visualizer = Visualizer(opt)
 # tensorboard
 from tensorboardX import SummaryWriter
 # comment = '_lr-{}_bs-{}_ne-{}_x{}_name-{}_pre-train-{}_amp-{}'.format(args.lr, args.batch_size, args.num_epoch, args.input_size, args.name, args.pre_trained, args.amp)
-comment = '_pre_20210125_ne_{}'.format(opt.niter)
+comment = '_{}_ne_{}_x{}_lfea{}_lrec{}_limp{}'.format(opt.name, opt.niter, opt.loadSize, int(opt.lambda_feat), int(opt.lambda_rec), int(opt.lambda_imp))
 writer = SummaryWriter(comment=comment)
 
+save_dir = './cp/{}'.format(opt.name)
+os.makedirs(save_dir, exist_ok=True)
 
 # # 印象推定器の読み込み
 # from my_model import my_resnet101
@@ -89,6 +91,15 @@ classifier.load_state_dict(torch.load(classifier_path))
 classifier = classifier.cuda()
 classifier.eval()
 
+# tensorboard Loss
+loss_D_li = []
+loss_D_fake_li = []
+loss_D_real_li = []
+loss_G_li = []
+loss_G_GAN_li = []
+loss_G_GAN_feat_li = []
+loss_G_VGG_li = []
+loss_G_imp_li = []
 
 total_steps = (start_epoch-1) * dataset_size + epoch_iter  
 process_start_time = time.time()
@@ -96,7 +107,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     epoch_start_time = time.time()
     if epoch != start_epoch:
         epoch_iter = epoch_iter % dataset_size
-    for i, data in enumerate(tqdm(dataset), start=epoch_iter):
+    for i, data in tqdm(enumerate(dataset, start=epoch_iter)):
         iter_start_time = time.time()
         total_steps += opt.batchSize
         epoch_iter += opt.batchSize
@@ -127,8 +138,17 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
 
         # calculate final loss scalar
         loss_D = (loss_dict['D_fake'] + loss_dict['D_real']) * 0.5
-        loss_G = loss_dict['G_GAN'] + loss_dict['G_GAN_Feat'] + loss_dict['G_VGG']
+        loss_G = loss_dict['G_GAN'] + loss_dict['G_GAN_Feat'] + loss_dict['G_VGG'] + loss_dict['G_imp']
         #loss_G = loss_dict['G_GAN'] + loss_dict['G_GAN_Feat'] + loss_dict['G_VGG'] + loss_dict['G_pixel'] + loss_dict['KL_loss']
+
+        loss_D_li.append(loss_D.data[0])
+        loss_D_fake_li.append(loss_dict['D_fake'].data[0]) 
+        loss_D_real_li.append(loss_dict['D_real'].data[0]) 
+        loss_G_li.append(loss_G.data[0]) 
+        loss_G_GAN_li.append(loss_dict['G_GAN'].data[0]) 
+        loss_G_GAN_feat_li.append(loss_dict['G_GAN_Feat'].data[0]) 
+        loss_G_VGG_li.append(loss_dict['G_VGG'].data[0])
+        loss_G_imp_li.append(loss_dict['G_imp'].data[0]) 
 
         ############### Backward Pass ####################
         # update generator weights
@@ -146,11 +166,11 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
 
         ############## Display results and errors ##########
         ### print out errors
-        if total_steps % opt.print_freq == 0:
-            errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
-            t = (time.time() - iter_start_time) / opt.batchSize
-            visualizer.print_current_errors(epoch, epoch_iter, errors, t)
-            visualizer.plot_current_errors(errors, total_steps)
+        # if total_steps % opt.print_freq == 0:
+        #     errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
+        #     t = (time.time() - iter_start_time) / opt.batchSize
+        #     visualizer.print_current_errors(epoch, epoch_iter, errors, t)
+        #     visualizer.plot_current_errors(errors, total_steps)
 
         ### display output images
         if save_fake:
@@ -163,7 +183,38 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
             print('saving the latest model (epoch %d, total_steps %d)' % (epoch, total_steps))
             model.module.save('latest')            
             np.savetxt(iter_path, (epoch, epoch_iter), delimiter=',', fmt='%d')
-       
+
+        ### save loss tensorboard
+        if total_steps % opt.save_latest_freq == 0:
+            writer.add_scalars('loss_D',{'train':np.mean(loss_D_li[-100:])}, total_steps)
+            writer.add_scalars('loss_D_fake',{'train':np.mean(loss_D_fake_li[-100:])}, total_steps)
+            writer.add_scalars('loss_D_real',{'train':np.mean(loss_D_real_li[-100:])}, total_steps)
+            writer.add_scalars('loss_G',{'train':np.mean(loss_G_li[-100:])}, total_steps)
+            writer.add_scalars('loss_G_GAN',{'train':np.mean(loss_G_GAN_li[-100:])}, total_steps)
+            writer.add_scalars('loss_G_VGG',{'train':np.mean(loss_G_VGG_li[-100:])}, total_steps)
+            writer.add_scalars('loss_G_GAN_feat',{'train':np.mean(loss_G_GAN_feat_li[-100:])}, total_steps)
+            writer.add_scalars('loss_G_imp',{'train':np.mean(loss_G_imp_li[-100:])}, total_steps)
+
+            loss_D_li = []
+            loss_D_fake_li = []
+            loss_D_real_li = []
+            loss_G_li = []
+            loss_G_GAN_li = []
+            loss_G_GAN_feat_li = []
+            loss_G_VGG_li = []
+            loss_G_imp_li = []
+        
+    # debug用 model save
+    # out_path = os.path.join(save_dir, '_epoch' + str(epoch) + '_step' + str(total_steps) + '.pt')
+    # torch.save(model.state_dict(), out_path)
+    # exit()
+
+    ### print out errors
+    errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
+    t = (time.time() - iter_start_time) / opt.batchSize
+    visualizer.print_current_errors(epoch, epoch_iter, errors, t)
+    visualizer.plot_current_errors(errors, total_steps)
+
     # end of epoch 
     iter_end_time = time.time()
     print('End of epoch %d / %d \t Time Taken: %d sec' %
@@ -173,11 +224,14 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     if epoch % opt.save_epoch_freq == 0:
         print('saving the model at the end of epoch %d, iters %d' % (epoch, total_steps))        
         model.module.save('latest')
-        model.module.save(epoch)
-        prev_epoch = epoch - opt.save_epoch_freq * opt.num_checkpoint
-        if prev_epoch >= 0:
-            model.module.delete_model(prev_epoch)
-        np.savetxt(iter_path, (epoch+1, 0), delimiter=',', fmt='%d')
+        model.module.save('epoch{}'.format(epoch))
+        # prev_epoch = epoch - opt.save_epoch_freq * opt.num_checkpoint
+        # if prev_epoch >= 0:
+        #     model.module.delete_model(prev_epoch)
+        # np.savetxt(iter_path, (epoch+1, 0), delimiter=',', fmt='%d')
+
+        # out_path = os.path.join(save_dir, 'epoch' + str(epoch) + '_step' + str(total_steps) + '.pt')
+        # torch.save(model.state_dict(), out_path)
 
     ### instead of only training the local enhancer, train the entire network after certain iterations
     if (opt.niter_fix_global != 0) and (epoch == opt.niter_fix_global):
