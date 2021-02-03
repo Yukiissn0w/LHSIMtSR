@@ -154,9 +154,13 @@ if __name__ == '__main__':
 
     elif args.model=='pretrained_resnet101':
         model = models.resnet101(pretrained=True)
+        # model.avgpool = nn.AvgPool2d(kernel_size=16, stride=1, padding=0, ceil_mode=False, count_include_pad=True)
+        # input_size=256
+        model.avgpool = nn.AvgPool2d(kernel_size=8, stride=1, padding=0, ceil_mode=False, count_include_pad=True)
         num_features = model.fc.in_features
-        model.fc = nn.Linear(num_features, 2) # >> line205でerror
-        
+        model.fc = nn.Linear(num_features, 2)
+        model_name = "resnet101_pretrained"
+
     # model = models.resnet101(num_classes=2)
 
 
@@ -213,6 +217,11 @@ if __name__ == '__main__':
 
             # outputs = model(inputs)
             outputs = model(inputs)
+
+            # debug用 
+            # print("outputs.size() : {}".format(outputs.size()))   # >> torch.Size([16, 2])
+            # print("labels.size() : {}".format(labels.size()))     # >> torch.Size([16])
+            # input()
 
             loss = criterion(outputs, labels)
             prec = accuracy(outputs.detach().data, labels.data)
